@@ -1,5 +1,5 @@
-
 import EditDebtForm from './EditDebtForm';
+import { PageProps } from '@/types'; // ajusta la ruta según donde tengas definido el tipo
 
 export async function generateStaticParams() {
   return [
@@ -9,6 +9,6 @@ export async function generateStaticParams() {
   ];
 }
 
-export default function EditDebtPage({ params }: { params: { id: string } }) {
+export default function EditDebtPage({ params }: PageProps) {
   return <EditDebtForm debtId={params.id} />;
 }
