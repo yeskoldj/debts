@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Debt } from '@/lib/types';
+import { Debt, DebtKind, RecurringFrequency } from '@/lib/types';
 import { getDebts, saveDebt, deleteDebt } from '@/lib/storage';
 
 interface EditDebtFormProps {
@@ -20,7 +20,12 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
     totalAmount: '',
     interestRate: '',
     startDate: '',
-    dueDate: ''
+    dueDate: '',
+    kind: 'loan' as DebtKind,
+    recurringAmount: '',
+    recurringFrequency: 'monthly' as RecurringFrequency,
+    installmentAmount: '',
+    totalInstallments: ''
   });
 
   useEffect(() => {
@@ -34,7 +39,12 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
         totalAmount: foundDebt.totalAmount.toString(),
         interestRate: foundDebt.interestRate?.toString() || '',
         startDate: foundDebt.startDate,
-        dueDate: foundDebt.dueDate || ''
+        dueDate: foundDebt.dueDate || '',
+        kind: foundDebt.kind,
+        recurringAmount: foundDebt.recurringAmount?.toString() || '',
+        recurringFrequency: foundDebt.recurringFrequency || 'monthly',
+        installmentAmount: foundDebt.installmentAmount?.toString() || '',
+        totalInstallments: foundDebt.totalInstallments?.toString() || ''
       });
     } else {
       router.push('/');
@@ -61,6 +71,37 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
       return;
     }
 
+    if (formData.dueDate && formData.dueDate < formData.startDate) {
+      alert('La fecha de vencimiento debe ser igual o posterior a la fecha de inicio.');
+      return;
+    }
+
+    let recurringAmount: number | undefined;
+    if (formData.kind === 'recurring') {
+      recurringAmount = parseFloat(formData.recurringAmount);
+      if (isNaN(recurringAmount) || recurringAmount <= 0) {
+        alert('Para una deuda recurrente necesitas definir el monto del ciclo de pago.');
+        return;
+      }
+    }
+
+    let installmentAmount: number | undefined;
+    let totalInstallments: number | undefined;
+    if (formData.kind === 'installment') {
+      installmentAmount = parseFloat(formData.installmentAmount);
+      totalInstallments = parseInt(formData.totalInstallments || '0', 10);
+
+      if (isNaN(installmentAmount) || installmentAmount <= 0) {
+        alert('Para un plan a plazos el pago por cuota debe ser mayor a 0.');
+        return;
+      }
+
+      if (isNaN(totalInstallments) || totalInstallments <= 0) {
+        alert('Indica cuántos pagos se requieren para completar el plan.');
+        return;
+      }
+    }
+
     const updatedDebt: Debt = {
       ...debt,
       name: formData.name.trim(),
@@ -68,7 +109,15 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
       totalAmount: amount,
       interestRate,
       startDate: formData.startDate,
-      dueDate: formData.dueDate || null
+      dueDate: formData.dueDate || null,
+      kind: formData.kind,
+      recurringAmount: formData.kind === 'recurring' ? recurringAmount : undefined,
+      recurringFrequency: formData.kind === 'recurring' ? formData.recurringFrequency : undefined,
+      installmentAmount: formData.kind === 'installment' ? installmentAmount : undefined,
+      totalInstallments: formData.kind === 'installment' ? totalInstallments : undefined,
+      completedInstallments: formData.kind === 'installment'
+        ? Math.min(totalInstallments ?? Number.POSITIVE_INFINITY, debt.completedInstallments ?? 0)
+        : undefined
     };
 
     saveDebt(updatedDebt);
@@ -144,6 +193,23 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tipo de obligación
+              </label>
+              <select
+                value={formData.kind}
+                onChange={(e) => setFormData({ ...formData, kind: e.target.value as DebtKind })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              >
+                <option value="loan">Préstamo / Deuda fija</option>
+                <option value="installment">Plan a plazos</option>
+                <option value="credit_card">Tarjeta de crédito</option>
+                <option value="recurring">Gasto recurrente</option>
+                <option value="other">Otro</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Monto total *
               </label>
               <input
@@ -157,6 +223,74 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
                 required
               />
             </div>
+
+            {formData.kind === 'recurring' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pago por ciclo *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={formData.recurringAmount}
+                    onChange={(e) => setFormData({ ...formData, recurringAmount: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="Ej: 850.00"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Frecuencia
+                  </label>
+                  <select
+                    value={formData.recurringFrequency}
+                    onChange={(e) => setFormData({ ...formData, recurringFrequency: e.target.value as RecurringFrequency })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  >
+                    <option value="weekly">Semanal</option>
+                    <option value="biweekly">Quincenal</option>
+                    <option value="monthly">Mensual</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {formData.kind === 'installment' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pago por cuota *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={formData.installmentAmount}
+                    onChange={(e) => setFormData({ ...formData, installmentAmount: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="Ej: 350.00"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Número de cuotas *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.totalInstallments}
+                    onChange={(e) => setFormData({ ...formData, totalInstallments: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="Ej: 12"
+                    required
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

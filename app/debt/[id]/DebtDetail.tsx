@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Debt, Payment } from '@/lib/types';
 import { getDebts, addPayment, deletePayment } from '@/lib/storage';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, generateId } from '@/lib/utils';
 import AddPaymentModal from '@/components/AddPaymentModal';
 
 interface DebtDetailProps {
@@ -46,7 +46,7 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
 
     const newPayment: Payment = {
       ...paymentData,
-      id: Date.now().toString(),
+      id: generateId(),
     };
 
     addPayment(debt.id, newPayment);

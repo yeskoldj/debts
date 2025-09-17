@@ -1,37 +1,183 @@
-import { Debt, Payment, SavingGoal } from '@/lib/types';
+import { Debt, DebtKind, Payment, RecurringFrequency, SavingGoal } from '@/lib/types';
+import { generateId } from '@/lib/utils';
 
 const DEBTS_KEY = 'debts';
 const SAVINGS_KEY = 'savingGoals';
 
-const normalizeDebt = (debt: any): Debt => {
-  const kind = debt.kind ?? 'loan';
+const validKinds: DebtKind[] = ['recurring', 'installment', 'loan', 'credit_card', 'other'];
+const validFrequencies: RecurringFrequency[] = ['weekly', 'biweekly', 'monthly'];
+const validPaymentTypes: Payment['type'][] = ['principal', 'interest', 'fee'];
 
-  return {
-    ...debt,
+const toNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined) return undefined;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const toNonNegativeNumber = (value: unknown): number | undefined => {
+  const parsed = toNumber(value);
+  if (parsed === undefined) return undefined;
+  return parsed >= 0 ? parsed : undefined;
+};
+
+const toPositiveNumber = (value: unknown): number | undefined => {
+  const parsed = toNumber(value);
+  if (parsed === undefined) return undefined;
+  return parsed > 0 ? parsed : undefined;
+};
+
+const toPositiveInteger = (value: unknown): number | undefined => {
+  const parsed = toNumber(value);
+  if (parsed === undefined) return undefined;
+  const intValue = Math.floor(parsed);
+  return intValue > 0 ? intValue : undefined;
+};
+
+const toNonNegativeInteger = (value: unknown): number | undefined => {
+  const parsed = toNumber(value);
+  if (parsed === undefined) return undefined;
+  const intValue = Math.floor(parsed);
+  return intValue >= 0 ? intValue : undefined;
+};
+
+const sanitizeText = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const sanitizeDate = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const sanitizeKind = (value: unknown): DebtKind => {
+  if (typeof value === 'string' && validKinds.includes(value as DebtKind)) {
+    return value as DebtKind;
+  }
+  return 'loan';
+};
+
+const sanitizeFrequency = (value: unknown): RecurringFrequency | undefined => {
+  if (typeof value === 'string' && validFrequencies.includes(value as RecurringFrequency)) {
+    return value as RecurringFrequency;
+  }
+  return undefined;
+};
+
+const sanitizePayments = (value: unknown): Payment[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((payment: any) => {
+      if (!payment || typeof payment !== 'object') return null;
+
+      const amount = toNonNegativeNumber(payment.amount) ?? 0;
+      const rawType = typeof payment.type === 'string' ? payment.type : undefined;
+      const type = rawType && validPaymentTypes.includes(rawType as Payment['type'])
+        ? (rawType as Payment['type'])
+        : 'principal';
+      const note = sanitizeText(payment.note);
+
+      const id = typeof payment.id === 'string' && payment.id.trim().length > 0
+        ? payment.id
+        : generateId();
+
+      const date = typeof payment.date === 'string' && payment.date.trim().length > 0
+        ? payment.date
+        : new Date().toISOString();
+
+      return {
+        id,
+        amount,
+        date,
+        note,
+        type,
+      } satisfies Payment;
+    })
+    .filter((payment): payment is Payment => payment !== null);
+};
+
+const normalizeDebt = (debt: any): Debt => {
+  const kind = sanitizeKind(debt?.kind);
+  const totalAmount = toPositiveNumber(debt?.totalAmount) ?? 0;
+  const interestRate = toNonNegativeNumber(debt?.interestRate);
+  const description = sanitizeText(debt?.description);
+
+  const payments = sanitizePayments(debt?.payments);
+  const createdAt = typeof debt?.createdAt === 'string' && debt.createdAt
+    ? debt.createdAt
+    : new Date().toISOString();
+  const startDate = typeof debt?.startDate === 'string' && debt.startDate
+    ? debt.startDate
+    : new Date().toISOString().split('T')[0];
+  const dueDate = sanitizeDate(debt?.dueDate);
+
+  const recurringAmount = kind === 'recurring'
+    ? toPositiveNumber(debt?.recurringAmount)
+    : undefined;
+  const recurringFrequency = kind === 'recurring'
+    ? sanitizeFrequency(debt?.recurringFrequency) ?? 'monthly'
+    : undefined;
+
+  const installmentAmount = kind === 'installment'
+    ? toPositiveNumber(debt?.installmentAmount)
+    : undefined;
+  const totalInstallments = kind === 'installment'
+    ? toPositiveInteger(debt?.totalInstallments)
+    : undefined;
+  const completedInstallments = kind === 'installment'
+    ? Math.min(
+        totalInstallments ?? Number.POSITIVE_INFINITY,
+        toNonNegativeInteger(debt?.completedInstallments) ?? 0
+      )
+    : undefined;
+
+  const id = typeof debt?.id === 'string' && debt.id.trim().length > 0
+    ? debt.id
+    : generateId();
+  const name = typeof debt?.name === 'string' && debt.name.trim().length > 0
+    ? debt.name.trim()
+    : 'Deuda sin nombre';
+
+  const normalizedDebt: Debt = {
+    id,
+    name,
+    totalAmount,
+    startDate,
+    dueDate,
+    payments,
+    createdAt,
     kind,
-    recurringAmount:
-      kind === 'recurring'
-        ? Number(debt.recurringAmount ?? debt.totalAmount ?? 0)
-        : debt.recurringAmount,
-    recurringFrequency:
-      kind === 'recurring'
-        ? debt.recurringFrequency ?? 'monthly'
-        : debt.recurringFrequency,
-    installmentAmount:
-      kind === 'installment'
-        ? Number(debt.installmentAmount ?? debt.totalAmount ?? 0)
-        : debt.installmentAmount,
-    totalInstallments:
-      kind === 'installment'
-        ? debt.totalInstallments ?? undefined
-        : debt.totalInstallments,
-    completedInstallments:
-      kind === 'installment'
-        ? debt.completedInstallments ?? 0
-        : debt.completedInstallments ?? 0,
-    payments: Array.isArray(debt.payments) ? debt.payments : [],
-    createdAt: debt.createdAt ?? new Date().toISOString(),
-  } as Debt;
+  };
+
+  if (description) {
+    normalizedDebt.description = description;
+  }
+
+  if (interestRate !== undefined) {
+    normalizedDebt.interestRate = interestRate;
+  }
+
+  if (recurringAmount !== undefined) {
+    normalizedDebt.recurringAmount = recurringAmount;
+    normalizedDebt.recurringFrequency = recurringFrequency ?? 'monthly';
+  }
+
+  if (installmentAmount !== undefined) {
+    normalizedDebt.installmentAmount = installmentAmount;
+  }
+
+  if (totalInstallments !== undefined) {
+    normalizedDebt.totalInstallments = totalInstallments;
+  }
+
+  if (completedInstallments !== undefined) {
+    normalizedDebt.completedInstallments = completedInstallments;
+  }
+
+  return normalizedDebt;
 };
 
 export const getDebts = (): Debt[] => {
