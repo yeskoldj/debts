@@ -17,8 +17,8 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
 
   const principalPayments = debt.payments.filter(p => p.type === 'principal');
   const totalPrincipalPaid = principalPayments.reduce((sum, payment) => sum + payment.amount, 0);
-  const remainingAmount = debt.totalAmount - totalPrincipalPaid;
-  const progressPercentage = (totalPrincipalPaid / debt.totalAmount) * 100;
+  const remainingAmount = Math.max(0, debt.totalAmount - totalPrincipalPaid);
+  const progressPercentage = debt.totalAmount > 0 ? (totalPrincipalPaid / debt.totalAmount) * 100 : 0;
   const isPaid = remainingAmount <= 0;
 
   const daysUntilDue = debt.dueDate ? getDaysUntilDue(debt.dueDate) : null;
@@ -31,6 +31,25 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
       onUpdate();
     }
   };
+
+  const getKindConfig = () => {
+    switch (debt.kind) {
+      case 'recurring':
+        return { label: 'Recurrente', chipClass: 'bg-blue-900/40 text-blue-300 border border-blue-500/50', icon: 'ri-repeat-line' };
+      case 'installment':
+        return { label: 'Plazos', chipClass: 'bg-purple-900/40 text-purple-300 border border-purple-500/50', icon: 'ri-calendar-schedule-line' };
+      case 'credit_card':
+        return { label: 'Crédito', chipClass: 'bg-amber-900/40 text-amber-300 border border-amber-500/50', icon: 'ri-bank-card-line' };
+      case 'loan':
+        return { label: 'Préstamo', chipClass: 'bg-green-900/40 text-green-300 border border-green-500/50', icon: 'ri-hand-coin-line' };
+      default:
+        return { label: 'Otro', chipClass: 'bg-gray-900/40 text-gray-300 border border-gray-500/50', icon: 'ri-checkbox-blank-circle-line' };
+    }
+  };
+
+  const kindConfig = getKindConfig();
+  const showRecurringInfo = debt.kind === 'recurring' && debt.recurringAmount;
+  const showInstallmentInfo = debt.kind === 'installment' && debt.installmentAmount && debt.totalInstallments;
 
   return (
     <div className="bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-700/50 p-4 relative hover:bg-gray-800/90 transition-all duration-200">
@@ -94,7 +113,13 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
 
       <Link href={`/debt/${debt.id}`}>
         <div className="cursor-pointer">
-          <h3 className="font-semibold text-white mb-1 pr-8">{debt.name}</h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-white pr-3 truncate">{debt.name}</h3>
+            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium ${kindConfig.chipClass}`}>
+              <i className={`${kindConfig.icon}`}></i>
+              {kindConfig.label}
+            </span>
+          </div>
 
           {debt.description && (
             <p className="text-xs text-gray-400 mb-3 pr-8 line-clamp-2">{debt.description}</p>
@@ -112,6 +137,20 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
                 {formatCurrency(remainingAmount)}
               </span>
             </div>
+
+            {showRecurringInfo && (
+              <div className="flex justify-between items-center text-xs text-blue-300">
+                <span className="uppercase tracking-wide">Pago {debt.recurringFrequency === 'weekly' ? 'semanal' : debt.recurringFrequency === 'biweekly' ? 'quincenal' : 'mensual'}</span>
+                <span>{formatCurrency(debt.recurringAmount ?? 0)}</span>
+              </div>
+            )}
+
+            {showInstallmentInfo && (
+              <div className="flex justify-between items-center text-xs text-purple-300">
+                <span className="uppercase tracking-wide">Cuota</span>
+                <span>{formatCurrency(debt.installmentAmount ?? 0)} · {debt.completedInstallments ?? 0}/{debt.totalInstallments}</span>
+              </div>
+            )}
 
             {debt.interestRate && (
               <div className="flex justify-between items-center">

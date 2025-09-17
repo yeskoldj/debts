@@ -9,10 +9,14 @@ import FilterTabs from '@/components/FilterTabs';
 import FinancialPlannerModal from '@/components/FinancialPlannerModal';
 import ProgressTracker from '@/components/ProgressTracker';
 import FinancialProgressDashboard from '@/components/FinancialProgressDashboard';
-import { Debt, DebtFilter } from '@/lib/types';
-import { getDebts, saveDebt, loadSampleDebts } from '@/lib/storage';
+import AddSavingGoalModal from '@/components/AddSavingGoalModal';
+import SavingGoalCard from '@/components/SavingGoalCard';
+import UpdateSavingGoalModal from '@/components/UpdateSavingGoalModal';
+import { Debt, DebtFilter, SavingGoal } from '@/lib/types';
+import { getDebts, saveDebt, loadSampleDebts, getSavingGoals, saveSavingGoal, deleteSavingGoal, recordSavingContribution } from '@/lib/storage';
 import { getSavedFinancialPlan } from '@/lib/financialPlan';
 import { initNotifications } from '@/lib/notifications';
+import { formatCurrency } from '@/lib/utils';
 
 export default function Home() {
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -22,9 +26,13 @@ export default function Home() {
   const [showProgressTracker, setShowProgressTracker] = useState(false);
   const [showProgressDashboard, setShowProgressDashboard] = useState(false);
   const [hasSavedPlan, setHasSavedPlan] = useState(false);
+  const [savingGoals, setSavingGoals] = useState<SavingGoal[]>([]);
+  const [showAddGoalModal, setShowAddGoalModal] = useState(false);
+  const [goalToContribute, setGoalToContribute] = useState<SavingGoal | null>(null);
 
   useEffect(() => {
     loadDebts();
+    loadSavingGoals();
     initializeApp();
     checkForSavedPlan();
   }, []);
@@ -54,6 +62,11 @@ export default function Home() {
     setDebts(savedDebts);
   };
 
+  const loadSavingGoals = () => {
+    const goals = getSavingGoals();
+    setSavingGoals(goals);
+  };
+
   const handleLoadSampleData = () => {
     if (confirm('¿Estás seguro de que quieres cargar todas las deudas del resumen? Esto reemplazará los datos actuales.')) {
       loadSampleDebts();
@@ -73,10 +86,41 @@ export default function Home() {
     setShowAddModal(false);
   };
 
+  const handleAddSavingGoal = (goalData: Omit<SavingGoal, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const now = new Date().toISOString();
+    const newGoal: SavingGoal = {
+      ...goalData,
+      id: Date.now().toString(),
+      createdAt: now,
+      updatedAt: now,
+      lastContributionAt: goalData.currentAmount > 0 ? now : null,
+      lastContributionNote: undefined
+    };
+
+    saveSavingGoal(newGoal);
+    loadSavingGoals();
+    setShowAddGoalModal(false);
+  };
+
+  const handleDeleteSavingGoal = (goalId: string) => {
+    if (confirm('¿Eliminar este objetivo de ahorro?')) {
+      deleteSavingGoal(goalId);
+      loadSavingGoals();
+    }
+  };
+
+  const handleContributeToGoal = (amount: number, note?: string) => {
+    if (!goalToContribute) return;
+
+    recordSavingContribution(goalToContribute.id, amount, note);
+    loadSavingGoals();
+    setGoalToContribute(null);
+  };
+
   const filteredDebts = debts.filter(debt => {
     const principalPaid = debt.payments.filter(p => p.type === 'principal').reduce((sum, payment) => sum + payment.amount, 0);
     const remainingAmount = debt.totalAmount - principalPaid;
-    
+
     switch (filter) {
       case 'active':
         return remainingAmount > 0;
@@ -98,15 +142,73 @@ export default function Home() {
     return debt.totalAmount - principalPaid > 0;
   }).length;
 
+  const totalGoalsSaved = savingGoals.reduce((sum, goal) => sum + goal.currentAmount, 0);
+  const completedGoals = savingGoals.filter(goal => goal.currentAmount >= goal.targetAmount).length;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-      <Header 
+      <Header
         onProgressClick={() => setShowProgressTracker(true)}
         showProgressButton={activeDebtsCount > 0}
       />
       
       <div className="pt-20 pb-6 px-4">
         <div className="max-w-md mx-auto">
+          <div className="bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-700/50 p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white flex items-center">
+                  <i className="ri-piggy-bank-line mr-2 text-green-400"></i>
+                  Objetivos de ahorro
+                </h2>
+                <p className="text-xs text-gray-400">Organiza tus ahorros sin descuidar tus obligaciones.</p>
+              </div>
+              <button
+                onClick={() => setShowAddGoalModal(true)}
+                className="px-3 py-2 bg-green-600/80 hover:bg-green-600 text-white rounded-lg transition-colors text-sm"
+              >
+                <i className="ri-add-line mr-1"></i>
+                Nuevo objetivo
+              </button>
+            </div>
+
+            {savingGoals.length > 0 ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                  <div className="p-3 bg-gray-700/40 rounded-lg border border-gray-600/40">
+                    <div className="text-xs text-gray-400">Metas activas</div>
+                    <div className="text-white font-semibold">{savingGoals.length}</div>
+                  </div>
+                  <div className="p-3 bg-gray-700/40 rounded-lg border border-gray-600/40">
+                    <div className="text-xs text-gray-400">Ahorro acumulado</div>
+                    <div className="text-green-300 font-semibold">{formatCurrency(totalGoalsSaved)}</div>
+                  </div>
+                  <div className="p-3 bg-gray-700/40 rounded-lg border border-gray-600/40">
+                    <div className="text-xs text-gray-400">Metas logradas</div>
+                    <div className="text-blue-300 font-semibold">{completedGoals}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {savingGoals.map(goal => (
+                    <SavingGoalCard
+                      key={goal.id}
+                      goal={goal}
+                      onDelete={handleDeleteSavingGoal}
+                      onContribute={(selectedGoal) => setGoalToContribute(selectedGoal)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <i className="ri-flag-line text-3xl text-gray-500 mb-2"></i>
+                <p className="text-sm text-gray-300 mb-2">Crea tu primer objetivo para impulsar tu ahorro.</p>
+                <p className="text-xs text-gray-400">Después de cubrir las deudas prioritarias, el plan asignará fondos aquí automáticamente.</p>
+              </div>
+            )}
+          </div>
+
           {/* Resumen total */}
           {debts.length > 0 && (
             <div className="bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-700/50 p-6 mb-6">
@@ -201,6 +303,21 @@ export default function Home() {
             setShowPlannerModal(false);
             checkForSavedPlan();
           }}
+        />
+      )}
+
+      {showAddGoalModal && (
+        <AddSavingGoalModal
+          onSave={handleAddSavingGoal}
+          onClose={() => setShowAddGoalModal(false)}
+        />
+      )}
+
+      {goalToContribute && (
+        <UpdateSavingGoalModal
+          goal={goalToContribute}
+          onContribute={handleContributeToGoal}
+          onClose={() => setGoalToContribute(null)}
         />
       )}
 
