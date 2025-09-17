@@ -18,6 +18,19 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
   const [debt, setDebt] = useState<Debt | null>(null);
   const [showAddPayment, setShowAddPayment] = useState(false);
 
+  const computeCompletedInstallments = (currentDebt: Debt, payments: Payment[]) => {
+    if (currentDebt.kind !== 'installment' || !currentDebt.installmentAmount) {
+      return currentDebt.completedInstallments ?? 0;
+    }
+
+    const principalPaid = payments
+      .filter(payment => payment.type === 'principal')
+      .reduce((sum, payment) => sum + payment.amount, 0);
+
+    const totalInstallments = currentDebt.totalInstallments ?? Number.POSITIVE_INFINITY;
+    return Math.min(totalInstallments, Math.floor(principalPaid / currentDebt.installmentAmount));
+  };
+
   useEffect(() => {
     const debts = getDebts();
     const foundDebt = debts.find((d) => d.id === debtId);
@@ -39,9 +52,12 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
     addPayment(debt.id, newPayment);
 
     // Actualizar estado local
+    const updatedPayments = [...debt.payments, newPayment];
+
     setDebt({
       ...debt,
-      payments: [...debt.payments, newPayment],
+      payments: updatedPayments,
+      completedInstallments: computeCompletedInstallments(debt, updatedPayments)
     });
 
     setShowAddPayment(false);
@@ -54,9 +70,11 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
       deletePayment(debt.id, paymentId);
 
       // Actualizar estado local
+      const updatedPayments = debt.payments.filter((p) => p.id !== paymentId);
       setDebt({
         ...debt,
-        payments: debt.payments.filter((p) => p.id !== paymentId),
+        payments: updatedPayments,
+        completedInstallments: computeCompletedInstallments(debt, updatedPayments)
       });
     }
   };
@@ -81,8 +99,8 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
   const totalFeesPaid = feePayments.reduce((sum, payment) => sum + payment.amount, 0);
   const totalPaid = totalPrincipalPaid + totalInterestPaid + totalFeesPaid;
 
-  const remainingAmount = debt.totalAmount - totalPrincipalPaid;
-  const progressPercentage = (totalPrincipalPaid / debt.totalAmount) * 100;
+  const remainingAmount = Math.max(0, debt.totalAmount - totalPrincipalPaid);
+  const progressPercentage = debt.totalAmount > 0 ? (totalPrincipalPaid / debt.totalAmount) * 100 : 0;
   const isPaid = remainingAmount <= 0;
 
   const getPaymentTypeLabel = (type: Payment['type']) => {
@@ -110,6 +128,23 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
         return 'text-gray-300 bg-gray-700/50 border-gray-600/50';
     }
   };
+
+  const getKindLabel = () => {
+    switch (debt.kind) {
+      case 'recurring':
+        return 'Gasto recurrente';
+      case 'installment':
+        return 'Plan a plazos';
+      case 'credit_card':
+        return 'Tarjeta de crédito';
+      case 'loan':
+        return 'Préstamo';
+      default:
+        return 'Otro tipo';
+    }
+  };
+
+  const paymentLimit = debt.kind === 'recurring' ? undefined : remainingAmount;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
@@ -144,6 +179,23 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
             <div className="text-sm text-gray-300">
               de {formatCurrency(debt.totalAmount)} restante
             </div>
+          </div>
+
+          <div className="mb-4 flex flex-wrap gap-2 justify-center">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-900/30 text-blue-200 border border-blue-500/40">
+              <i className="ri-shield-check-line mr-1"></i>
+              {getKindLabel()}
+            </span>
+            {debt.kind === 'recurring' && debt.recurringAmount && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-900/20 text-blue-100 border border-blue-500/30">
+                Pago {debt.recurringFrequency === 'weekly' ? 'semanal' : debt.recurringFrequency === 'biweekly' ? 'quincenal' : 'mensual'}: {formatCurrency(debt.recurringAmount)}
+              </span>
+            )}
+            {debt.kind === 'installment' && debt.installmentAmount && debt.totalInstallments && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-900/20 text-purple-100 border border-purple-500/30">
+                Cuota: {formatCurrency(debt.installmentAmount)} · {debt.completedInstallments ?? 0}/{debt.totalInstallments}
+              </span>
+            )}
           </div>
 
           {/* Descripción */}
@@ -197,6 +249,10 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
                 <span className="text-gray-200">{formatDate(debt.dueDate)}</span>
               </div>
             )}
+            <div className="flex justify-between">
+              <span className="text-gray-400">Tipo:</span>
+              <span className="text-gray-200">{getKindLabel()}</span>
+            </div>
             {debt.interestRate && (
               <div className="flex justify-between">
                 <span className="text-gray-400">Tasa de interés:</span>
@@ -264,7 +320,7 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
       {/* Modal para agregar pago */}
       {showAddPayment && (
         <AddPaymentModal
-          maxAmount={remainingAmount}
+          maxAmount={paymentLimit}
           onSave={handleAddPayment}
           onClose={() => setShowAddPayment(false)}
         />

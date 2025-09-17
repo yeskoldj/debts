@@ -1,5 +1,5 @@
 
-import { Debt } from '@/lib/types';
+import { Debt, SavingGoal } from '@/lib/types';
 import { getDebts } from '@/lib/storage';
 import { getDaysUntilDue } from '@/lib/utils';
 
@@ -13,6 +13,8 @@ export interface SavedFinancialPlan {
   availableForDebts: number;
   weeklyTarget: number;
   recommendations: DebtRecommendation[];
+  savingsPlan: SavingsRecommendation[];
+  savingsContribution: number;
   progress: PlanProgress;
   status: 'active' | 'completed' | 'needs_update';
 }
@@ -27,6 +29,15 @@ export interface DebtRecommendation {
   reason: string;
   weeksPaid: number;
   totalWeeksNeeded: number;
+}
+
+export interface SavingsRecommendation {
+  goalId: string;
+  goalName: string;
+  suggestedContribution: number;
+  priority: SavingGoal['priority'];
+  remainingAmount: number;
+  deadline: string | null;
 }
 
 export interface PlanProgress {
@@ -44,8 +55,8 @@ const PLAN_STORAGE_KEY = 'savedFinancialPlan';
 
 export const saveFinancialPlan = (plan: Omit<SavedFinancialPlan, 'id' | 'createdAt' | 'updatedAt' | 'progress' | 'status'>): SavedFinancialPlan => {
   const now = new Date().toISOString();
-  const progress = calculatePlanProgress(plan.recommendations);
-  
+  const progress = calculatePlanProgress(plan.recommendations, now);
+
   const savedPlan: SavedFinancialPlan = {
     ...plan,
     id: Date.now().toString(),
@@ -61,21 +72,26 @@ export const saveFinancialPlan = (plan: Omit<SavedFinancialPlan, 'id' | 'created
 
 export const getSavedFinancialPlan = (): SavedFinancialPlan | null => {
   if (typeof window === 'undefined') return null;
-  
+
   try {
     const stored = localStorage.getItem(PLAN_STORAGE_KEY);
     if (!stored) return null;
-    
+
     const plan: SavedFinancialPlan = JSON.parse(stored);
-    
-    // Actualizar progreso cada vez que se obtiene el plan
-    const updatedProgress = calculatePlanProgress(plan.recommendations);
-    const updatedPlan = {
+    const normalizedPlan: SavedFinancialPlan = {
       ...plan,
+      savingsPlan: plan.savingsPlan ?? [],
+      savingsContribution: plan.savingsContribution ?? 0
+    };
+
+    // Actualizar progreso cada vez que se obtiene el plan
+    const updatedProgress = calculatePlanProgress(normalizedPlan.recommendations);
+    const updatedPlan = {
+      ...normalizedPlan,
       progress: updatedProgress,
       updatedAt: new Date().toISOString()
     };
-    
+
     localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(updatedPlan));
     return updatedPlan;
   } catch {
@@ -86,22 +102,22 @@ export const getSavedFinancialPlan = (): SavedFinancialPlan | null => {
 export const updateFinancialPlan = (updates: Partial<SavedFinancialPlan>): SavedFinancialPlan | null => {
   const currentPlan = getSavedFinancialPlan();
   if (!currentPlan) return null;
-  
+
   const updatedPlan: SavedFinancialPlan = {
     ...currentPlan,
     ...updates,
     updatedAt: new Date().toISOString(),
-    progress: calculatePlanProgress(updates.recommendations || currentPlan.recommendations)
+    progress: calculatePlanProgress(updates.recommendations || currentPlan.recommendations, currentPlan.createdAt)
   };
   
   localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(updatedPlan));
   return updatedPlan;
 };
 
-export const calculatePlanProgress = (recommendations: DebtRecommendation[]): PlanProgress => {
+export const calculatePlanProgress = (recommendations: DebtRecommendation[], planCreatedAt?: string): PlanProgress => {
   const debts = getDebts();
-  const planCreated = getSavedFinancialPlan()?.createdAt;
-  
+  const planCreated = planCreatedAt;
+
   if (!planCreated) {
     return {
       weeksCompleted: 0,
@@ -320,4 +336,69 @@ export const generateRecommendations = (debts: Debt[], availableMoney: number): 
     const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
     return priorityOrder[b.priority] - priorityOrder[a.priority];
   });
+};
+
+export const generateSavingsRecommendations = (goals: SavingGoal[], availableMoney: number): SavingsRecommendation[] => {
+  if (availableMoney <= 0) return [];
+
+  const activeGoals = goals
+    .filter(goal => goal.currentAmount < goal.targetAmount)
+    .sort((a, b) => {
+      const priorityOrder: Record<SavingGoal['priority'], number> = {
+        essential: 3,
+        important: 2,
+        nice_to_have: 1
+      };
+
+      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+
+      const aTime = a.deadline ? new Date(a.deadline).getTime() : Number.POSITIVE_INFINITY;
+      const bTime = b.deadline ? new Date(b.deadline).getTime() : Number.POSITIVE_INFINITY;
+      return aTime - bTime;
+    });
+
+  if (activeGoals.length === 0) return [];
+
+  const weights: Record<SavingGoal['priority'], number> = {
+    essential: 3,
+    important: 2,
+    nice_to_have: 1
+  };
+
+  const totalWeight = activeGoals.reduce((sum, goal) => sum + weights[goal.priority], 0);
+  let remaining = availableMoney;
+  const recommendations: SavingsRecommendation[] = [];
+
+  for (const goal of activeGoals) {
+    if (remaining <= 0) break;
+
+    const goalRemaining = goal.targetAmount - goal.currentAmount;
+    if (goalRemaining <= 0) continue;
+
+    const baseShare = remaining * (weights[goal.priority] / totalWeight);
+    let suggested = activeGoals.length === 1 ? remaining : baseShare;
+
+    if (suggested < 5 && remaining >= 5) {
+      suggested = 5;
+    }
+
+    suggested = Math.min(goalRemaining, suggested, remaining);
+    suggested = Math.round(suggested * 100) / 100;
+
+    if (suggested <= 0) continue;
+
+    recommendations.push({
+      goalId: goal.id,
+      goalName: goal.name,
+      suggestedContribution: suggested,
+      priority: goal.priority,
+      remainingAmount: Math.round(Math.max(0, goalRemaining - suggested) * 100) / 100,
+      deadline: goal.deadline ?? null
+    });
+
+    remaining = Math.max(0, remaining - suggested);
+  }
+
+  return recommendations;
 };
