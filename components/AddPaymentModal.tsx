@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Payment } from '@/lib/types';
 
 interface AddPaymentModalProps {
-  maxAmount: number;
+  maxAmount?: number;
   onSave: (payment: Omit<Payment, 'id'>) => void;
   onClose: () => void;
 }
@@ -33,7 +33,7 @@ export default function AddPaymentModal({ maxAmount, onSave, onClose }: AddPayme
     }
 
     // Solo validar el límite para pagos de capital
-    if (formData.type === 'principal' && amount > maxAmount) {
+    if (formData.type === 'principal' && maxAmount !== undefined && amount > maxAmount) {
       alert(`El pago de capital no puede ser mayor al saldo pendiente ($${maxAmount.toFixed(2)})`);
       return;
     }
@@ -115,7 +115,7 @@ export default function AddPaymentModal({ maxAmount, onSave, onClose }: AddPayme
               placeholder="0.00"
               required
             />
-            {formData.type === 'principal' && (
+            {formData.type === 'principal' && maxAmount !== undefined && Number.isFinite(maxAmount) && (
               <p className="text-xs text-gray-400 mt-1">
                 Saldo pendiente: ${maxAmount.toFixed(2)}
               </p>

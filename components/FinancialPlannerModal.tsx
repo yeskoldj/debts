@@ -3,17 +3,19 @@
 
 import { useState, useEffect } from 'react';
 import { Debt } from '@/lib/types';
-import { getDebts } from '@/lib/storage';
+import { getDebts, getSavingGoals } from '@/lib/storage';
 import { getDaysUntilDue, formatCurrency } from '@/lib/utils';
 import { 
-  saveFinancialPlan, 
-  getSavedFinancialPlan, 
-  updateFinancialPlan, 
-  deleteSavedPlan, 
+  saveFinancialPlan,
+  getSavedFinancialPlan,
+  updateFinancialPlan,
+  deleteSavedPlan,
   generateRecommendations,
+  generateSavingsRecommendations,
   getWeeklyIncome,
   SavedFinancialPlan,
-  DebtRecommendation
+  DebtRecommendation,
+  SavingsRecommendation
 } from '@/lib/financialPlan';
 import DailyIncomeTracker from './DailyIncomeTracker';
 import DailyExpenseTracker from './DailyExpenseTracker';
@@ -28,6 +30,8 @@ interface WeeklyPlan {
   availableForDebts: number;
   recommendations: DebtRecommendation[];
   weeklyTarget: number;
+  savingsPlan: SavingsRecommendation[];
+  savingsContribution: number;
 }
 
 export default function FinancialPlannerModal({ onClose }: FinancialPlannerModalProps) {
@@ -127,13 +131,21 @@ export default function FinancialPlannerModal({ onClose }: FinancialPlannerModal
     }
 
     const recommendations = generateRecommendations(activeDebts, available);
+    const weeklyTarget = recommendations.reduce((sum, rec) => sum + rec.suggestedPayment, 0);
+
+    const savingsGoals = getSavingGoals();
+    const leftoverForSavings = Math.max(0, available - weeklyTarget);
+    const savingsPlan = generateSavingsRecommendations(savingsGoals, leftoverForSavings);
+    const savingsContribution = savingsPlan.reduce((sum, rec) => sum + rec.suggestedContribution, 0);
 
     const newPlan: WeeklyPlan = {
       totalIncome: income,
       essentialExpenses: totalExpenses,
       availableForDebts: available,
       recommendations,
-      weeklyTarget: recommendations.reduce((sum, rec) => sum + rec.suggestedPayment, 0)
+      weeklyTarget,
+      savingsPlan,
+      savingsContribution
     };
 
     setPlan(newPlan);
@@ -149,7 +161,9 @@ export default function FinancialPlannerModal({ onClose }: FinancialPlannerModal
       otherExpenses: parseFloat(otherExpenses) || 0,
       availableForDebts: plan.availableForDebts,
       weeklyTarget: plan.weeklyTarget,
-      recommendations: plan.recommendations
+      recommendations: plan.recommendations,
+      savingsPlan: plan.savingsPlan,
+      savingsContribution: plan.savingsContribution
     });
 
     setSavedPlan(saved);
@@ -177,14 +191,19 @@ export default function FinancialPlannerModal({ onClose }: FinancialPlannerModal
     });
 
     const newRecommendations = generateRecommendations(activeDebts, newAvailable);
+    const newTarget = newRecommendations.reduce((sum, rec) => sum + rec.suggestedPayment, 0);
+    const savingsPlan = generateSavingsRecommendations(getSavingGoals(), Math.max(0, newAvailable - newTarget));
+    const savingsContribution = savingsPlan.reduce((sum, rec) => sum + rec.suggestedContribution, 0);
 
     const updated = updateFinancialPlan({
       weeklyIncome: currentIncome,
       essentialExpenses: currentExpenses.food + currentExpenses.gas,
       otherExpenses: currentExpenses.other,
       availableForDebts: newAvailable,
-      weeklyTarget: newRecommendations.reduce((sum, rec) => sum + rec.suggestedPayment, 0),
-      recommendations: newRecommendations
+      weeklyTarget: newTarget,
+      recommendations: newRecommendations,
+      savingsPlan,
+      savingsContribution
     });
 
     if (updated) {
@@ -386,6 +405,45 @@ export default function FinancialPlannerModal({ onClose }: FinancialPlannerModal
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="bg-green-900/20 rounded-lg p-4 border border-green-500/30">
+                <h3 className="font-medium text-green-200 mb-3 flex items-center justify-between">
+                  <span>
+                    <i className="ri-piggy-bank-line mr-2"></i>
+                    Plan de Ahorro Semanal
+                  </span>
+                  <span className="text-sm font-semibold text-green-300">
+                    {formatCurrency(savedPlan.savingsContribution || 0)}/sem
+                  </span>
+                </h3>
+
+                {savedPlan.savingsPlan.length > 0 ? (
+                  <div className="space-y-2">
+                    {savedPlan.savingsPlan.map((goal) => (
+                      <div key={goal.goalId} className="bg-green-900/30 rounded-lg p-3 border border-green-500/30 text-sm text-green-100">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium">{goal.goalName}</span>
+                          <span className="text-green-300 font-semibold">{formatCurrency(goal.suggestedContribution)}</span>
+                        </div>
+                        <div className="text-xs text-green-200 flex justify-between">
+                          <span>Prioridad: {goal.priority === 'essential' ? 'Esencial' : goal.priority === 'important' ? 'Importante' : 'Deseable'}</span>
+                          <span>Restante: {formatCurrency(goal.remainingAmount)}</span>
+                        </div>
+                        {goal.deadline && (
+                          <div className="text-xs text-green-300 mt-1">
+                            Meta para {new Date(goal.deadline).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-green-100 bg-green-900/30 rounded-lg p-3 border border-green-500/30">
+                    <i className="ri-information-line mr-2"></i>
+                    Aún no tienes metas de ahorro activas. Crea una desde la pantalla principal para asignar tu excedente.
+                  </div>
+                )}
               </div>
 
               {/* Proyección */}
@@ -590,7 +648,7 @@ export default function FinancialPlannerModal({ onClose }: FinancialPlannerModal
                   <i className="ri-pie-chart-line mr-2 text-blue-400"></i>
                   Resumen Semanal
                 </h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
+                <div className={`grid gap-4 text-center ${plan?.savingsContribution ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
                   <div>
                     <div className="text-lg font-semibold text-green-400">
                       {formatCurrency(plan?.totalIncome || 0)}
@@ -609,6 +667,14 @@ export default function FinancialPlannerModal({ onClose }: FinancialPlannerModal
                     </div>
                     <div className="text-xs text-gray-400">Para Deudas</div>
                   </div>
+                  {plan?.savingsContribution ? (
+                    <div>
+                      <div className="text-lg font-semibold text-green-300">
+                        {formatCurrency(plan.savingsContribution)}
+                      </div>
+                      <div className="text-xs text-gray-400">Para Ahorro</div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -666,6 +732,45 @@ export default function FinancialPlannerModal({ onClose }: FinancialPlannerModal
                     <div className="text-xs text-green-200">
                       Puedes usar este dinero para pagos adicionales o emergencias
                     </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-green-900/20 rounded-lg p-4 border border-green-500/30">
+                <h3 className="font-medium text-green-200 mb-3 flex items-center justify-between">
+                  <span>
+                    <i className="ri-piggy-bank-line mr-2"></i>
+                    Distribución sugerida para ahorro
+                  </span>
+                  <span className="text-sm font-semibold text-green-300">
+                    {formatCurrency(plan?.savingsContribution || 0)} / semana
+                  </span>
+                </h3>
+
+                {plan && plan.savingsPlan.length > 0 ? (
+                  <div className="space-y-2">
+                    {plan.savingsPlan.map(goal => (
+                      <div key={goal.goalId} className="bg-green-900/40 border border-green-500/40 rounded-lg p-3 text-sm text-green-100">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium">{goal.goalName}</span>
+                          <span className="text-green-300 font-semibold">{formatCurrency(goal.suggestedContribution)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-green-200">
+                          <span>Prioridad: {goal.priority === 'essential' ? 'Esencial' : goal.priority === 'important' ? 'Importante' : 'Deseable'}</span>
+                          <span>Restante: {formatCurrency(goal.remainingAmount)}</span>
+                        </div>
+                        {goal.deadline && (
+                          <div className="text-xs text-green-300 mt-1">
+                            Meta {new Date(goal.deadline).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-green-100 bg-green-900/30 rounded-lg p-3 border border-green-500/30">
+                    <i className="ri-information-line mr-2"></i>
+                    Si agregas objetivos de ahorro en la pantalla principal, destinaremos aquí cualquier excedente semanal.
                   </div>
                 )}
               </div>
