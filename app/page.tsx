@@ -16,7 +16,7 @@ import { Debt, DebtFilter, SavingGoal } from '@/lib/types';
 import { getDebts, saveDebt, loadSampleDebts, getSavingGoals, saveSavingGoal, deleteSavingGoal, recordSavingContribution } from '@/lib/storage';
 import { getSavedFinancialPlan } from '@/lib/financialPlan';
 import { initNotifications } from '@/lib/notifications';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, generateId } from '@/lib/utils';
 
 export default function Home() {
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -77,7 +77,7 @@ export default function Home() {
   const handleAddDebt = (debtData: Omit<Debt, 'id' | 'payments' | 'createdAt'>) => {
     const newDebt: Debt = {
       ...debtData,
-      id: Date.now().toString(),
+      id: generateId(),
       payments: [],
       createdAt: new Date().toISOString()
     };
@@ -90,7 +90,7 @@ export default function Home() {
     const now = new Date().toISOString();
     const newGoal: SavingGoal = {
       ...goalData,
-      id: Date.now().toString(),
+      id: generateId(),
       createdAt: now,
       updatedAt: now,
       lastContributionAt: goalData.currentAmount > 0 ? now : null,

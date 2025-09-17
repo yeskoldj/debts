@@ -1,7 +1,7 @@
 
 import { Debt, SavingGoal } from '@/lib/types';
 import { getDebts } from '@/lib/storage';
-import { getDaysUntilDue } from '@/lib/utils';
+import { generateId, getDaysUntilDue } from '@/lib/utils';
 
 export interface SavedFinancialPlan {
   id: string;
@@ -59,7 +59,7 @@ export const saveFinancialPlan = (plan: Omit<SavedFinancialPlan, 'id' | 'created
 
   const savedPlan: SavedFinancialPlan = {
     ...plan,
-    id: Date.now().toString(),
+    id: generateId(),
     createdAt: now,
     updatedAt: now,
     progress,

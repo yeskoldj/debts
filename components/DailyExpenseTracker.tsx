@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, generateId } from '@/lib/utils';
 
 interface DailyExpense {
   id: string;
@@ -90,7 +90,7 @@ export default function DailyExpenseTracker({ onClose }: DailyExpenseTrackerProp
     const existingIndex = dailyExpenses.findIndex(expense => expense.date === newExpense.date);
 
     const expense: DailyExpense = {
-      id: Date.now().toString(),
+      id: generateId(),
       date: newExpense.date,
       foodAmount,
       gasAmount,

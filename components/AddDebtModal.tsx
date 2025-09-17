@@ -44,6 +44,11 @@ export default function AddDebtModal({ onSave, onClose }: AddDebtModalProps) {
       return;
     }
 
+    if (formData.dueDate && formData.dueDate < formData.startDate) {
+      alert('La fecha de vencimiento debe ser igual o posterior a la fecha de inicio.');
+      return;
+    }
+
     let recurringAmount: number | undefined;
     if (formData.kind === 'recurring') {
       recurringAmount = parseFloat(formData.recurringAmount);

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, generateId } from '@/lib/utils';
 
 interface DailyIncome {
   id: string;
@@ -76,7 +76,7 @@ export default function DailyIncomeTracker({ onClose }: DailyIncomeTrackerProps)
     const existingIndex = dailyIncomes.findIndex(income => income.date === newIncome.date);
 
     const income: DailyIncome = {
-      id: Date.now().toString(),
+      id: generateId(),
       date: newIncome.date,
       amount,
       note: newIncome.note.trim() || undefined
