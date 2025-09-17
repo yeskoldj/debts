@@ -23,31 +23,39 @@ export const showNotification = async (title: string, body: string, data?: any) 
   if (Notification.permission !== 'granted') return;
 
   try {
-    // Verificar si hay un service worker activo
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      const registration = await navigator.serviceWorker.ready;
-      
-      // Usar la API del service worker
-      await registration.showNotification(title, {
-        body,
-        icon: '/icon-192x192.png',
-        badge: '/icon-192x192.png',
-        data,
-        requireInteraction: true,
-        tag: 'debt-reminder',
-        actions: [
-          {
-            action: 'view',
-            title: 'Ver deuda'
-          },
-          {
-            action: 'dismiss',
-            title: 'Cerrar'
-          }
-        ]
-      });
-    } else {
-      // Fallback a la API nativa si no hay service worker
+    const useServiceWorker = 'serviceWorker' in navigator;
+    if (useServiceWorker) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+
+        if (registration?.showNotification) {
+          await registration.showNotification(title, {
+            body,
+            icon: '/icon-192x192.png',
+            badge: '/icon-192x192.png',
+            data,
+            requireInteraction: true,
+            tag: 'debt-reminder',
+            actions: [
+              {
+                action: 'view',
+                title: 'Ver deuda'
+              },
+              {
+                action: 'dismiss',
+                title: 'Cerrar'
+              }
+            ]
+          });
+          return;
+        }
+      } catch (error) {
+        console.warn('No se pudo usar el service worker para notificaciones:', error);
+      }
+    }
+
+    if (typeof Notification === 'function') {
+      // Fallback a la API nativa cuando esté disponible
       const notification = new Notification(title, {
         body,
         icon: '/icon-192x192.png',
@@ -64,6 +72,8 @@ export const showNotification = async (title: string, body: string, data?: any) 
         }
         notification.close();
       };
+    } else {
+      console.warn('El navegador no soporta notificaciones nativas.');
     }
   } catch (error) {
     console.error('Error mostrando notificación:', error);
