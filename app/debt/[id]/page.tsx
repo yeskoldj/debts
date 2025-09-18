@@ -1,6 +1,7 @@
 
 import DebtDetail from './DebtDetail';
 
-export default function DebtDetailPage({ params }: { params: { id: string } }) {
-  return <DebtDetail debtId={params.id} />;
+export default async function DebtDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <DebtDetail debtId={id} />;
 }
