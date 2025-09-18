@@ -20,6 +20,19 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
   const remainingAmount = Math.max(0, debt.totalAmount - totalPrincipalPaid);
   const progressPercentage = debt.totalAmount > 0 ? (totalPrincipalPaid / debt.totalAmount) * 100 : 0;
   const isPaid = remainingAmount <= 0;
+  const isRecurring = debt.kind === 'recurring';
+
+  const latestPaymentDate = debt.payments.reduce<string | null>((latest, payment) => {
+    if (!payment.date) {
+      return latest;
+    }
+
+    if (!latest) {
+      return payment.date;
+    }
+
+    return new Date(payment.date) > new Date(latest) ? payment.date : latest;
+  }, null);
 
   const daysUntilDue = debt.dueDate ? getDaysUntilDue(debt.dueDate) : null;
   const isOverdue = daysUntilDue !== null && daysUntilDue < 0;
@@ -48,7 +61,6 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
   };
 
   const kindConfig = getKindConfig();
-  const showRecurringInfo = debt.kind === 'recurring' && debt.recurringAmount;
   const showInstallmentInfo = debt.kind === 'installment' && debt.installmentAmount && debt.totalInstallments;
 
   return (
@@ -126,23 +138,39 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
           )}
 
           <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-400">Total:</span>
-              <span className="font-medium text-gray-200">{formatCurrency(debt.totalAmount)}</span>
-            </div>
+            {!isRecurring ? (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Total:</span>
+                  <span className="font-medium text-gray-200">{formatCurrency(debt.totalAmount)}</span>
+                </div>
 
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-400">Restante:</span>
-              <span className={`font-medium ${isPaid ? 'text-green-400' : 'text-red-400'}`}>
-                {formatCurrency(remainingAmount)}
-              </span>
-            </div>
-
-            {showRecurringInfo && (
-              <div className="flex justify-between items-center text-xs text-blue-300">
-                <span className="uppercase tracking-wide">Pago {debt.recurringFrequency === 'weekly' ? 'semanal' : debt.recurringFrequency === 'biweekly' ? 'quincenal' : 'mensual'}</span>
-                <span>{formatCurrency(debt.recurringAmount ?? 0)}</span>
-              </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Restante:</span>
+                  <span className={`font-medium ${isPaid ? 'text-green-400' : 'text-red-400'}`}>
+                    {formatCurrency(remainingAmount)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Pago {debt.recurringFrequency === 'weekly' ? 'semanal' : debt.recurringFrequency === 'biweekly' ? 'quincenal' : 'mensual'}:</span>
+                  <span className="font-medium text-blue-200">{formatCurrency(debt.recurringAmount ?? 0)}</span>
+                </div>
+                {debt.dueDate && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-400">Próximo pago:</span>
+                    <span className="font-medium text-gray-200">{formatDate(debt.dueDate)}</span>
+                  </div>
+                )}
+                {latestPaymentDate && (
+                  <div className="flex justify-between items-center text-xs text-gray-400">
+                    <span>Último pago registrado:</span>
+                    <span className="text-gray-300">{formatDate(latestPaymentDate)}</span>
+                  </div>
+                )}
+              </>
             )}
 
             {showInstallmentInfo && (
@@ -169,18 +197,30 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
 
           {/* Barra de progreso */}
           <div className="mt-4">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-xs text-gray-400">Progreso del Capital</span>
-              <span className="text-xs font-medium text-gray-200">{Math.round(progressPercentage)}%</span>
-            </div>
-            <div className="w-full bg-gray-700 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full transition-all duration-300 ${
-                  isPaid ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-red-600'
-                }`}
-                style={{ width: `${Math.min(progressPercentage, 100)}%` }}
-              ></div>
-            </div>
+            {!isRecurring ? (
+              <>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs text-gray-400">Progreso del Capital</span>
+                  <span className="text-xs font-medium text-gray-200">{Math.round(progressPercentage)}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      isPaid ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-red-600'
+                    }`}
+                    style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+                  ></div>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-lg border border-blue-500/40 bg-blue-900/20 p-3 text-xs text-blue-100">
+                <p className="font-semibold text-blue-200">Compromiso recurrente activo</p>
+                <p className="mt-1 leading-relaxed">
+                  Registra cada pago para llevar control histórico. El sistema programará automáticamente el siguiente vencimiento
+                  según el último pago registrado.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </Link>

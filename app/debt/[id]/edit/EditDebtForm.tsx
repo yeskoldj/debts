@@ -54,13 +54,20 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!debt || !formData.name.trim() || !formData.totalAmount) {
+    if (!debt || !formData.name.trim()) {
       alert('Por favor completa todos los campos obligatorios');
       return;
     }
 
-    const amount = parseFloat(formData.totalAmount);
-    if (isNaN(amount) || amount <= 0) {
+    const requiresTotalAmount = formData.kind !== 'recurring';
+
+    if (requiresTotalAmount && !formData.totalAmount) {
+      alert('Indica el monto total de la deuda o compromiso.');
+      return;
+    }
+
+    const amount = requiresTotalAmount ? parseFloat(formData.totalAmount) : 0;
+    if (requiresTotalAmount && (isNaN(amount) || amount <= 0)) {
       alert('El monto debe ser un número válido mayor a 0');
       return;
     }
@@ -106,7 +113,7 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
       ...debt,
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
-      totalAmount: amount,
+      totalAmount: Number.isFinite(amount) ? amount : 0,
       interestRate,
       startDate: formData.startDate,
       dueDate: formData.dueDate || null,
@@ -208,21 +215,32 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Monto total *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={formData.totalAmount}
-                onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="0.00"
-                required
-              />
-            </div>
+            {formData.kind !== 'recurring' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Monto total *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={formData.totalAmount}
+                  onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+            ) : (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+                <p className="font-medium text-blue-800">Este gasto es recurrente</p>
+                <p className="mt-1 text-blue-700/80">
+                  No necesitas un saldo total. Registra el pago del ciclo (semanal, quincenal o mensual) y mantenlo activo hasta
+                  que lo canceles. Cada pago reprogramará automáticamente el próximo vencimiento en 7, 15 o 30 días según la
+                  frecuencia.
+                </p>
+              </div>
+            )}
 
             {formData.kind === 'recurring' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

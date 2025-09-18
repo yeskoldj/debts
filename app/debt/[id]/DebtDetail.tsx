@@ -102,6 +102,23 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
   const remainingAmount = Math.max(0, debt.totalAmount - totalPrincipalPaid);
   const progressPercentage = debt.totalAmount > 0 ? (totalPrincipalPaid / debt.totalAmount) * 100 : 0;
   const isPaid = remainingAmount <= 0;
+  const isRecurring = debt.kind === 'recurring';
+  const recurringFrequencyLabel = debt.recurringFrequency === 'weekly'
+    ? 'semanal'
+    : debt.recurringFrequency === 'biweekly'
+      ? 'quincenal'
+      : 'mensual';
+  const latestPaymentDate = debt.payments.reduce<string | null>((latest, payment) => {
+    if (!payment.date) {
+      return latest;
+    }
+
+    if (!latest) {
+      return payment.date;
+    }
+
+    return new Date(payment.date) > new Date(latest) ? payment.date : latest;
+  }, null);
 
   const getPaymentTypeLabel = (type: Payment['type']) => {
     switch (type) {
@@ -173,12 +190,37 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
         {/* Resumen de la deuda */}
         <div className="bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-700/50 p-6 mb-6">
           <div className="text-center mb-6">
-            <div className="text-3xl font-bold text-white mb-1">
-              {formatCurrency(remainingAmount)}
-            </div>
-            <div className="text-sm text-gray-300">
-              de {formatCurrency(debt.totalAmount)} restante
-            </div>
+            {isRecurring ? (
+              <>
+                <div className="text-3xl font-bold text-white mb-1">
+                  {formatCurrency(debt.recurringAmount ?? 0)}
+                </div>
+                <div className="text-sm text-gray-300">
+                  Pago {recurringFrequencyLabel} programado
+                </div>
+                {debt.dueDate && (
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-500/40 bg-blue-900/30 px-3 py-1 text-xs text-blue-100">
+                    <i className="ri-calendar-schedule-line"></i>
+                    Próximo vencimiento: {formatDate(debt.dueDate)}
+                  </div>
+                )}
+                {latestPaymentDate && (
+                  <div className="mt-2 text-xs text-gray-400 flex items-center justify-center gap-2">
+                    <i className="ri-history-line"></i>
+                    Último pago registrado: {formatDate(latestPaymentDate)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="text-3xl font-bold text-white mb-1">
+                  {formatCurrency(remainingAmount)}
+                </div>
+                <div className="text-sm text-gray-300">
+                  de {formatCurrency(debt.totalAmount)} restante
+                </div>
+              </>
+            )}
           </div>
 
           <div className="mb-4 flex flex-wrap gap-2 justify-center">
@@ -186,9 +228,9 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
               <i className="ri-shield-check-line mr-1"></i>
               {getKindLabel()}
             </span>
-            {debt.kind === 'recurring' && debt.recurringAmount && (
+            {isRecurring && debt.recurringAmount && (
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-900/20 text-blue-100 border border-blue-500/30">
-                Pago {debt.recurringFrequency === 'weekly' ? 'semanal' : debt.recurringFrequency === 'biweekly' ? 'quincenal' : 'mensual'}: {formatCurrency(debt.recurringAmount)}
+                Pago {recurringFrequencyLabel}: {formatCurrency(debt.recurringAmount)}
               </span>
             )}
             {debt.kind === 'installment' && debt.installmentAmount && debt.totalInstallments && (
@@ -206,20 +248,36 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
           )}
 
           {/* Barra de progreso */}
-          <div className="mb-6">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-gray-300">Progreso del Capital</span>
-              <span className="text-sm font-medium text-white">{Math.round(progressPercentage)}%</span>
+          {!isRecurring ? (
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-gray-300">Progreso del Capital</span>
+                <span className="text-sm font-medium text-white">{Math.round(progressPercentage)}%</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-3">
+                <div
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    isPaid ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-red-600'
+                  }`}
+                  style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+                ></div>
+              </div>
             </div>
-            <div className="w-full bg-gray-700 rounded-full h-3">
-              <div
-                className={`h-3 rounded-full transition-all duration-300 ${
-                  isPaid ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-red-600'
-                }`}
-                style={{ width: `${Math.min(progressPercentage, 100)}%` }}
-              ></div>
+          ) : (
+            <div className="mb-6 rounded-lg border border-blue-500/30 bg-blue-900/20 p-4 text-sm text-blue-100">
+              <h3 className="font-semibold text-blue-200 mb-1 flex items-center gap-2">
+                <i className="ri-repeat-line"></i>
+                Gasto recurrente activo
+              </h3>
+              <p className="leading-relaxed">
+                Cada vez que registres un pago reprogramaremos el próximo vencimiento {debt.recurringFrequency === 'weekly'
+                  ? '7 días'
+                  : debt.recurringFrequency === 'biweekly'
+                    ? '15 días'
+                    : '30 días'} después. Cancela este registro cuando dejes de tener este compromiso.
+              </p>
             </div>
-          </div>
+          )}
 
           {/* Resumen de pagos */}
           <div className="grid grid-cols-3 gap-3 mb-4">
@@ -243,11 +301,32 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
               <span className="text-gray-400">Fecha de inicio:</span>
               <span className="text-gray-200">{formatDate(debt.startDate)}</span>
             </div>
-            {debt.dueDate && (
-              <div className="flex justify-between">
-                <span className="text-gray-400">Fecha de vencimiento:</span>
-                <span className="text-gray-200">{formatDate(debt.dueDate)}</span>
-              </div>
+            {isRecurring ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Frecuencia:</span>
+                  <span className="text-gray-200">Pago {recurringFrequencyLabel}</span>
+                </div>
+                {debt.dueDate && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Próximo vencimiento:</span>
+                    <span className="text-gray-200">{formatDate(debt.dueDate)}</span>
+                  </div>
+                )}
+                {latestPaymentDate && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Último pago:</span>
+                    <span className="text-gray-200">{formatDate(latestPaymentDate)}</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              debt.dueDate && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Fecha de vencimiento:</span>
+                  <span className="text-gray-200">{formatDate(debt.dueDate)}</span>
+                </div>
+              )
             )}
             <div className="flex justify-between">
               <span className="text-gray-400">Tipo:</span>

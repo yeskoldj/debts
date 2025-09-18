@@ -29,6 +29,10 @@ export default function ProgressTracker({ onClose }: ProgressTrackerProps) {
   const calculateProgress = () => {
     const debts = getDebts();
     const activeDebts = debts.filter(debt => {
+      if (debt.kind === 'recurring') {
+        return false;
+      }
+
       const principalPaid = debt.payments.filter(p => p.type === 'principal').reduce((sum, p) => sum + p.amount, 0);
       return debt.totalAmount - principalPaid > 0;
     });
