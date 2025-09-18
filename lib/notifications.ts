@@ -68,7 +68,7 @@ export const showNotification = async (title: string, body: string, data?: any) 
       notification.onclick = () => {
         window.focus();
         if (data?.debtId) {
-          window.location.href = `/debt/${data.debtId}`;
+          window.location.href = `/debt?id=${encodeURIComponent(data.debtId)}`;
         }
         notification.close();
       };

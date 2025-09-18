@@ -121,7 +121,7 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
     };
 
     saveDebt(updatedDebt);
-    router.push(`/debt/${debt.id}`);
+    router.push(`/debt?id=${encodeURIComponent(debt.id)}`);
   };
 
   const handleDelete = () => {
@@ -148,8 +148,8 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <header className="bg-white/95 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center">
-          <Link 
-            href={`/debt/${debt?.id}`}
+          <Link
+            href={{ pathname: '/debt', query: { id: debt.id } }}
             className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-gray-900 transition-colors mr-3"
           >
             <i className="ri-arrow-left-line text-xl"></i>
@@ -342,7 +342,7 @@ export default function EditDebtForm({ debtId }: EditDebtFormProps) {
               </button>
               <div className="flex-1 flex gap-3">
                 <Link
-                  href={`/debt/${debt?.id}`}
+                  href={{ pathname: '/debt', query: { id: debt.id } }}
                   className="flex-1 px-4 py-2 text-center text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   Cancelar

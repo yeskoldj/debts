@@ -161,7 +161,7 @@ export default function DebtDetail({ debtId }: DebtDetailProps) {
             {debt.name}
           </h1>
           <Link
-            href={`/debt/${debt.id}/edit`}
+            href={{ pathname: '/debt/edit', query: { id: debt.id } }}
             className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-400 transition-colors"
           >
             <i className="ri-edit-line text-xl"></i>

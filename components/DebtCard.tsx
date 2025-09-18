@@ -65,7 +65,7 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
         {showMenu && (
           <div className="absolute right-0 top-8 bg-gray-800 rounded-lg shadow-xl border border-gray-700 py-2 min-w-32 z-10">
             <Link
-              href={`/debt/${debt.id}/edit`}
+              href={{ pathname: '/debt/edit', query: { id: debt.id } }}
               className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
               onClick={() => setShowMenu(false)}
             >
@@ -111,7 +111,7 @@ export default function DebtCard({ debt, onUpdate }: DebtCardProps) {
         </div>
       )}
 
-      <Link href={`/debt/${debt.id}`}>
+      <Link href={{ pathname: '/debt', query: { id: debt.id } }}>
         <div className="cursor-pointer">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-white pr-3 truncate">{debt.name}</h3>
