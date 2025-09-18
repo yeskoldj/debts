@@ -232,6 +232,18 @@ export const addPayment = (debtId: string, payment: Payment): void => {
         totalInstallments,
         Math.floor(principalPaid / debt.installmentAmount)
       );
+    } else if (debt.kind === 'recurring') {
+      const paymentDate = new Date(payment.date);
+      if (!Number.isNaN(paymentDate.getTime())) {
+        const nextDue = new Date(paymentDate);
+        const daysToAdd = debt.recurringFrequency === 'weekly'
+          ? 7
+          : debt.recurringFrequency === 'biweekly'
+            ? 15
+            : 30;
+        nextDue.setDate(nextDue.getDate() + daysToAdd);
+        debt.dueDate = nextDue.toISOString().split('T')[0];
+      }
     }
     localStorage.setItem(DEBTS_KEY, JSON.stringify(debts));
   }
@@ -316,7 +328,7 @@ export const loadSampleDebts = (): void => {
       id: 'debt-2',
       name: 'TM',
       description: 'Pago mensual de servicios',
-      totalAmount: 200.0,
+      totalAmount: 0,
       startDate: '2025-01-01',
       dueDate: '2025-08-13',
       payments: [],
@@ -344,7 +356,7 @@ export const loadSampleDebts = (): void => {
       id: 'debt-4',
       name: 'Xfinity',
       description: 'Servicio de internet y cable',
-      totalAmount: 30.0,
+      totalAmount: 0,
       startDate: '2025-01-01',
       dueDate: '2025-08-18',
       payments: [],
@@ -369,7 +381,7 @@ export const loadSampleDebts = (): void => {
       id: 'debt-6',
       name: 'Geico',
       description: 'Seguro de auto mensual',
-      totalAmount: 537.0,
+      totalAmount: 0,
       startDate: '2025-01-01',
       dueDate: '2025-09-01',
       payments: [],

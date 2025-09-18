@@ -120,24 +120,35 @@ export default function Home() {
   const filteredDebts = debts.filter(debt => {
     const principalPaid = debt.payments.filter(p => p.type === 'principal').reduce((sum, payment) => sum + payment.amount, 0);
     const remainingAmount = debt.totalAmount - principalPaid;
+    const isRecurring = debt.kind === 'recurring';
 
     switch (filter) {
       case 'active':
-        return remainingAmount > 0;
+        return isRecurring || remainingAmount > 0;
       case 'paid':
-        return remainingAmount <= 0;
+        return !isRecurring && remainingAmount <= 0;
       default:
         return true;
     }
   });
 
-  const totalAmount = debts.reduce((sum, debt) => sum + debt.totalAmount, 0);
+  const totalAmount = debts
+    .filter(debt => debt.kind !== 'recurring')
+    .reduce((sum, debt) => sum + debt.totalAmount, 0);
   const totalRemaining = debts.reduce((sum, debt) => {
+    if (debt.kind === 'recurring') {
+      return sum;
+    }
+
     const principalPaid = debt.payments.filter(p => p.type === 'principal').reduce((paidSum, payment) => paidSum + payment.amount, 0);
     return sum + (debt.totalAmount - principalPaid);
   }, 0);
 
   const activeDebtsCount = debts.filter(debt => {
+    if (debt.kind === 'recurring') {
+      return true;
+    }
+
     const principalPaid = debt.payments.filter(p => p.type === 'principal').reduce((sum, payment) => sum + payment.amount, 0);
     return debt.totalAmount - principalPaid > 0;
   }).length;
